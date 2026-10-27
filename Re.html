@@ -2,47 +2,75 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>Teste de Realidade Aumentada</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+  >
 
-  <!-- Biblioteca 3D -->
+  <title>Teste AR - Hiro</title>
+
+  <!-- A-Frame -->
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 
-  <!-- Biblioteca de realidade aumentada -->
+  <!-- AR.js -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.8/aframe/build/aframe-ar.js"></script>
 
   <style>
+    html,
     body {
       margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
       font-family: Arial, sans-serif;
+      background: black;
     }
 
     #status {
       position: fixed;
       top: 12px;
       left: 12px;
-      z-index: 10;
+      right: 12px;
+      z-index: 9999;
+
       padding: 10px 14px;
+
       background: rgba(0, 0, 0, 0.75);
       color: white;
+
       border-radius: 8px;
       font-size: 14px;
+
+      pointer-events: none;
     }
   </style>
 </head>
 
 <body>
 
-  <div id="status">Procurando marcador Hiro...</div>
+  <div id="status">
+    Iniciando câmera...
+  </div>
 
   <a-scene
     embedded
+
     vr-mode-ui="enabled: false"
-    renderer="antialias: false; colorManagement: true"
+
+    renderer="
+      antialias: false;
+      alpha: true;
+      precision: mediump;
+    "
+
     arjs="
       sourceType: webcam;
+      sourceWidth: 1280;
+      sourceHeight: 720;
+      displayWidth: 1280;
+      displayHeight: 720;
       trackingMethod: best;
       detectionMode: mono;
       debugUIEnabled: false;
@@ -56,38 +84,201 @@
       emitevents="true"
     >
 
-      <!-- Objeto virtual -->
-      
-<!-- Objeto virtual: esfera -->
-<a-sphere
-  position="0 0.5 0"
-  radius="0.2"
-  color="#FF0000"
-  material="shader: flat"
->
-</a-sphere>
-
+      <!-- Esfera -->
+      <a-sphere
+        position="0 0.5 0"
+        radius="0.2"
+        color="#FF0000"
+        material="shader: flat"
+      >
+      </a-sphere>
 
     </a-marker>
 
-    <!-- CÃ¢mera -->
+    <!-- câmera do A-Frame -->
     <a-entity camera></a-entity>
 
   </a-scene>
+
 
   <script>
     const marcador = document.getElementById("marcador");
     const status = document.getElementById("status");
 
-    marcador.addEventListener("markerFound", () => {
-      status.textContent = "Marcador reconhecido!";
-      status.style.background = "rgba(0, 120, 40, 0.85)";
+
+    /*
+     * AR.js dispara "camera-init" quando consegue
+     * inicializar o MediaStream.
+     */
+    window.addEventListener("camera-init", async (event) => {
+
+      console.log("Câmera AR.js iniciada");
+
+      const stream = event.detail?.stream || event.stream;
+
+      if (!stream) {
+        console.warn("Stream não encontrado no evento camera-init");
+        status.textContent = "Câmera iniciada";
+        return;
+      }
+
+
+      const tracks = stream.getVideoTracks();
+
+      if (!tracks.length) {
+        console.warn("Nenhuma track de vídeo encontrada");
+        return;
+      }
+
+
+      const track = tracks[0];
+
+      console.log("Track da câmera:", track);
+
+
+      /*
+       * Informações da câmera escolhida pelo Android/Chrome
+       */
+      const settings = track.getSettings();
+
+      console.log("Configurações atuais:", settings);
+
+
+      /*
+       * Verifica quais recursos essa câmera suporta.
+       */
+      if (typeof track.getCapabilities === "function") {
+
+        const capabilities = track.getCapabilities();
+
+        console.log("Capacidades da câmera:", capabilities);
+
+
+        /*
+         * Galaxy S22 / aparelhos multi-camera:
+         *
+         * se o browser abriu a câmera em algo equivalente
+         * a 0.6x, tentamos colocar em 1x.
+         */
+        if (capabilities.zoom) {
+
+          console.log(
+            "Zoom disponível:",
+            capabilities.zoom.min,
+            "até",
+            capabilities.zoom.max
+          );
+
+
+          if (
+            capabilities.zoom.min <= 1 &&
+            capabilities.zoom.max >= 1
+          ) {
+
+            try {
+
+              await track.applyConstraints({
+                advanced: [
+                  {
+                    zoom: 1
+                  }
+                ]
+              });
+
+
+              console.log(
+                "Zoom alterado para 1x",
+                track.getSettings()
+              );
+
+
+              status.textContent =
+                "Câmera principal 1x ativada. Procurando Hiro...";
+
+
+            } catch (erro) {
+
+              console.warn(
+                "Não foi possível aplicar zoom 1x:",
+                erro
+              );
+
+
+              status.textContent =
+                "Câmera ativa. Procurando Hiro...";
+            }
+
+          } else {
+
+            console.warn(
+              "Essa câmera não suporta zoom 1x."
+            );
+
+            status.textContent =
+              "Câmera ativa. Procurando Hiro...";
+          }
+
+        } else {
+
+          console.warn(
+            "Controle de zoom não disponível nesta câmera/browser."
+          );
+
+          status.textContent =
+            "Câmera ativa. Procurando Hiro...";
+        }
+      }
+
     });
 
-    marcador.addEventListener("markerLost", () => {
-      status.textContent = "Procurando marcador Hiro...";
-      status.style.background = "rgba(0, 0, 0, 0.75)";
+
+
+    /*
+     * Caso o AR.js não consiga abrir a câmera
+     */
+    window.addEventListener("camera-error", (event) => {
+
+      console.error("Erro de câmera:", event);
+
+      status.textContent =
+        "Erro ao acessar a câmera.";
+
+      status.style.background =
+        "rgba(180, 0, 0, 0.85)";
     });
+
+
+
+    /*
+     * Hiro encontrado
+     */
+    marcador.addEventListener("markerFound", () => {
+
+      console.log("Hiro reconhecido");
+
+      status.textContent =
+        "Marcador reconhecido!";
+
+      status.style.background =
+        "rgba(0, 120, 40, 0.85)";
+    });
+
+
+
+    /*
+     * Hiro perdido
+     */
+    marcador.addEventListener("markerLost", () => {
+
+      console.log("Hiro perdido");
+
+      status.textContent =
+        "Procurando marcador Hiro...";
+
+      status.style.background =
+        "rgba(0, 0, 0, 0.75)";
+    });
+
   </script>
 
 </body>
